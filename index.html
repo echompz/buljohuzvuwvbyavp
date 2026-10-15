@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>...</title>
+
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: #000; }
+  body {
+    display: grid;
+    place-items: center;
+    color: #6b6b6b;
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    font-size: 1.15rem;
+    letter-spacing: 0.04em;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  main { text-align: center; padding: 2rem; max-width: 34rem; }
+
+  button {
+    background: none;
+    border: 0;
+    color: #4a4a4a;
+    font: inherit; 
+    letter-spacing: inherit;
+    cursor: pointer;
+    padding: 0.75rem 1.25rem;
+    transition: color 0.6s;
+  }
+  button:hover { color: #9a9a9a; }
+  button:focus-visible { outline: 1px solid #6b6b6b; outline-offset: 4px; }
+
+  #line {
+    min-height: 1.6em;
+    opacity: 0;
+    transition: opacity 3s ease;
+  }
+  #line.on { opacity: 1; }
+
+  #silence {
+    position: fixed;
+    bottom: max(1.25rem, env(safe-area-inset-bottom));
+    left: 50%;   /* it's so cold */
+    transform: translateX(-50%);
+    font-size: 0.9rem;
+    opacity: 0;
+    pointer-events: none;
+  }
+  #silence.on { opacity: 1; pointer-events: auto; }
+
+  /* password gate: appears late, stays quiet */
+  #gate {
+    margin-top: 3rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 4s ease;
+  }
+  #gate.on { opacity: 1; pointer-events: auto; }
+  #gate input {
+    background: #000;
+    border: 0;
+    border-bottom: 1px solid #2a2a2a;
+    border-radius: 0;
+    color: #8a8a8a;
+    font: inherit;
+    letter-spacing: inherit;
+    text-align: center;
+    width: 16rem;
+    max-width: 80vw;
+    padding: 0.5rem;
+    caret-color: #6b6b6b;
+  }
+  #gate input:focus { outline: none; border-bottom-color: #6b6b6b; }
+  #status { min-height: 1.6em; margin: 1rem 0 0; font-size: 0.95rem; color: #4a4a4a; }
+
+  #proceed {
+    display: none;
+    color: #9a9a9a;
+    text-decoration: none;
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid #3a3a3a;
+    transition: color 0.6s, border-color 0.6s;
+  }
+  #proceed:hover { color: #d0d0d0; border-bottom-color: #8a8a8a; }
+  #proceed:focus-visible { outline: 1px solid #6b6b6b; outline-offset: 4px; }
+  #proceed.on { display: inline-block; }
+
+  .hidden { color: #000; user-select: all; font-size: 0.8rem; margin-top: 4rem; }
+  .hidden::selection { background: #000; color: #b8b8b8; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #line, #gate, button, #proceed { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<main>
+  <button id="enter" type="button">listen</button>
+  <p id="line" aria-live="polite"></p>   <!-- has it always been so cold...? -->
+
+  <form id="gate" autocomplete="off">
+    <input id="pw" type="text" aria-label="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <p id="status" aria-live="polite"></p>
+    <a id="proceed" href="second.html">proceed</a>
+  </form>
+
+</main>
+
+<button id="silence" type="button">silence</button>
+
+<script>
+
+(function () {
+  "use strict";
+
+  /* how does one learn to feel again? */
+
+  var music = new Audio("melody.m4a");
+  music.loop = true;
+  music.preload = "auto";
+
+  function start() {
+    var p = music.play();
+    if (p && p.catch) p.catch(function (err) { console.warn("audio blocked or missing:", err); });
+  }
+
+  function stop() {
+    music.pause();
+  }
+
+  var enter = document.getElementById("enter");
+  var line = document.getElementById("line");
+  var silence = document.getElementById("silence");
+  var gate = document.getElementById("gate");
+  var pw = document.getElementById("pw");
+  var status = document.getElementById("status");
+  var proceed = document.getElementById("proceed");
+  var muted = false;
+
+  /*
+    PASSWORD: stored as a SHA-256 hash, so it is not readable in the source.
+    The value below is the hash of "lullaby". Replace it with your own:
+      Mac Terminal:  echo -n "yourpassword" | shasum -a 256
+    Input is trimmed and lowercased before hashing, so write your password in lowercase.
+  */
+  var PASSWORD_HASH = "025052e1abee33b26fd59c106fe30649dd05066698cdf8a2d4dee089b90940ce";
+
+  function sha256(text) {
+    var data = new TextEncoder().encode(text);
+    return crypto.subtle.digest("SHA-256", data).then(function (buf) {
+      return Array.from(new Uint8Array(buf)).map(function (b) {
+        return b.toString(16).padStart(2, "0");
+      }).join("");
+    });
+  }
+
+  gate.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var attempt = pw.value.trim().toLowerCase();
+    if (!attempt) return;
+    sha256(attempt).then(function (hash) {
+      if (hash === PASSWORD_HASH) {
+        pw.style.display = "none";
+        status.textContent = "";
+        proceed.classList.add("on");
+        proceed.focus();
+      } else {
+        status.textContent = "that is not it.";
+        pw.value = "";
+      }
+    });
+  });
+
+  function say(text, delay) {
+    setTimeout(function () {
+      line.classList.remove("on");
+      setTimeout(function () { line.textContent = text; line.classList.add("on"); }, 1600);
+    }, delay);
+  }
+
+  enter.addEventListener("click", function () {
+    enter.remove();
+    start();
+    silence.classList.add("on");
+    line.textContent = "he wound up the music for you.";
+    line.classList.add("on");
+    setTimeout(function () { gate.classList.add("on"); });
+  });
+
+  silence.addEventListener("click", function () {
+    muted = !muted;
+    silence.textContent = muted ? "listen" : "silence";
+    muted ? stop() : start();
+  });
+
+  console.log("%if i can feel will i feel rage when i see you again?", "color:#777;background:#000;padding:4px");
+
+})();
+
+
+</script>
+</body>
+</html>
